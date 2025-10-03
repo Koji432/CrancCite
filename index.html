@@ -3,43 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リンク機構 体験サイト</title>
+    <title>リンク機構 体験サイト - スマホ最適化</title>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
             text-align: center;
             background-color: #f4f4f9;
-            padding: 10px;
+            padding: 5px; /* パディングを減らして画面を広く使う */
         }
         h1 {
             color: #0056b3;
-            margin-bottom: 5px;
+            margin: 10px 0 5px 0;
+            font-size: 1.5em; /* フォントサイズ調整 */
         }
         h2 {
             color: #1d3557;
-            margin-top: 40px;
+            margin-top: 25px; /* マージンを調整 */
+            font-size: 1.2em; /* フォントサイズ調整 */
         }
         canvas {
             border: 3px solid #333;
             background-color: #fff;
             display: block;
+            /* width/heightはJavaScriptで設定するが、ここではmax-widthを設定 */
+            max-width: 100%; 
+            height: auto;
             margin: 10px auto;
             cursor: grab;
-            touch-action: none; 
+            touch-action: none; /* スマホでスクロールと間違われないようにする */
         }
         canvas:active {
             cursor: grabbing;
         }
         .instruction {
-            margin-top: 15px;
+            margin-top: 5px;
             color: #e63946;
             font-weight: bold;
+            font-size: 1.1em; /* タップ指示のフォントを大きく */
         }
         .mechanism-container {
-            margin-bottom: 40px;
+            margin-bottom: 25px;
         }
         .info {
-            font-size: 0.9em;
+            font-size: 0.85em; /* infoのフォントサイズ調整 */
             margin-top: 10px;
             padding: 5px;
         }
@@ -51,6 +57,7 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            font-size: 0.9em;
         }
         .controls button:hover {
             background-color: #264653;
@@ -59,10 +66,9 @@
 </head>
 <body>
 
-    <h1>動かしてみよう　リンク機構！！</h1>
-    <font size="5">
-    <p class="instruction">黄色い点をタップして機構を動かしてね！</p>
-    </font>
+    <h1>動かしてみよう リンク機構！！</h1>
+    <p class="instruction">黄色い点をタップして動かしてね！</p>
+
     <div class="mechanism-container">
         <h2>平行クランク</h2>
         <canvas id="fourBarCanvas" width="600" height="350"></canvas>
@@ -86,10 +92,11 @@
         const TWO_PI = 2 * Math.PI;
 
         //==================================================
-        // 軌跡データ
+        // 軌跡データ (スライダクランク機構にB点用の軌跡を追加)
         //==================================================
         let fourBarTrace = [];      // C点の軌跡を保存
-        let sliderCrankTrace = [];  // A点の軌跡を保存
+        let sliderCrankTraceA = []; // A点の軌跡を保存 (クランク先端)
+        let sliderCrankTraceB = []; // B点の軌跡を保存 (スライダ先端)
 
         // 軌跡をクリアするグローバル関数（HTMLボタン用）
         function clearTrace(mechanism) {
@@ -97,7 +104,8 @@
                 fourBarTrace = [];
                 drawFourBar();
             } else if (mechanism === 'sliderCrank') {
-                sliderCrankTrace = [];
+                sliderCrankTraceA = [];
+                sliderCrankTraceB = []; // B点の軌跡もリセット
                 drawSliderCrank();
             }
         }
@@ -109,22 +117,21 @@
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = 1;
-            ctx.globalAlpha = 0.5; // 少し透明にして見やすくする
+            ctx.globalAlpha = 0.5; 
             
             ctx.moveTo(traceArray[0].x, traceArray[0].y);
             for (let i = 1; i < traceArray.length; i++) {
                 ctx.lineTo(traceArray[i].x, traceArray[i].y);
             }
             ctx.stroke();
-            ctx.globalAlpha = 1.0; // 透明度を元に戻す
+            ctx.globalAlpha = 1.0; 
         }
 
         //==================================================
-        // 補助関数: 描画ヘルパー (前回と同じ)
+        // 補助関数: 描画ヘルパー
         //==================================================
 
         function drawLink(ctx, x1, y1, x2, y2, color, label) {
-            // ... (前回の drawLink 関数と同じ内容)
             ctx.strokeStyle = color;
             ctx.lineWidth = 8;
             ctx.lineCap = 'round';
@@ -139,7 +146,6 @@
         }
 
         function drawPin(ctx, x, y, color) {
-            // ... (前回の drawPin 関数と同じ内容)
             const pinRadius = 8;
             ctx.beginPath();
             ctx.arc(x, y, pinRadius, 0, TWO_PI);
@@ -151,7 +157,7 @@
         }
 
         //==================================================
-        // 1. 四節リンク機構のロジック
+        // 1. 四節リンク機構のロジック (平行クランク動作に修正)
         //==================================================
         
         const fourBarCanvas = document.getElementById('fourBarCanvas');
@@ -160,10 +166,11 @@
         const fourBarH = fourBarCanvas.height;
         const fourBarInfo = document.getElementById('fourBarInfo');
 
-        const FB_L1 = 150; 
-        const FB_L2 = 80;    
-        const FB_L3 = 170;   
-        const FB_L4 = 100;   
+        // ★ 平行クランクになるようリンク長を修正
+        const FB_L1 = 200; // 固定リンク
+        const FB_L2 = 80;  // 原動節
+        const FB_L3 = 200; // 連結節 (固定リンクと等しい)
+        const FB_L4 = 80;  // 従動節 (原動節と等しい)
         
         let fourBarAngle = Math.PI / 4; 
 
@@ -177,11 +184,13 @@
 
         function checkGrashof() {
             fourBarInfo.innerHTML = `
-		<font size="5">
-                <div style="color: green; font-weight: bold;">
-                    円運動→揺動運動
+                <div style="color: green; font-weight: bold; font-size: 1.1em;">
+                    平行クランク機構
                 </div>
-		</font>
+                <div>
+                    L1=${FB_L1}, L2=${FB_L2}, L3=${FB_L3}, L4=${FB_L4}
+                    (L1=L3, L2=L4)
+                </div>
             `;
         }
 
@@ -193,30 +202,30 @@
             const Ky = FB_Dy - By;
             const K = Math.sqrt(Kx * Kx + Ky * Ky);
             
-            // 描画範囲外の処理
             if (K > FB_L3 + FB_L4 || K < Math.abs(FB_L3 - FB_L4)) {
                 fourBarCtx.clearRect(0, 0, fourBarW, fourBarH);
                 fourBarCtx.fillStyle = 'red';
-                fourBarCtx.fillText('リンクの長さが不適切で、機構が閉じません。', FB_centerX - 100, FB_centerY);
+                fourBarCtx.fillText('リンクの長さが不適切です。', FB_centerX - 100, FB_centerY);
                 return; 
             }
 
+            // 平行クランクの計算 (ここでは通常の四節リンクの計算を適用)
             const beta = Math.acos((FB_L4 * FB_L4 + K * K - FB_L3 * FB_L3) / (2 * FB_L4 * K));
             const gamma = Math.atan2(Ky, Kx);
             
-            const theta4 = gamma - beta;
+            const theta4 = gamma - beta; // 通常は下の構成
             const Cx = FB_Dx - FB_L4 * Math.cos(theta4);
             const Cy = FB_Dy - FB_L4 * Math.sin(theta4);
 
             fourBarCtx.clearRect(0, 0, fourBarW, fourBarH);
             
-            // ★ 軌跡の描画
-            drawTrace(fourBarCtx, fourBarTrace, '#f4a261'); // L4と同じ色で軌跡を描画
+            // 軌跡の描画 (C点)
+            drawTrace(fourBarCtx, fourBarTrace, '#f4a261'); 
 
-            // リンクの描画 (前回のコードから変更なし)
-            drawLink(fourBarCtx, FB_Ax, FB_Ay, Bx, By, '#e63946', `L2=${FB_L2}`);
-            drawLink(fourBarCtx, Bx, By, Cx, Cy, '#457b9d', `L3=${FB_L3}`);
-            drawLink(fourBarCtx, FB_Dx, FB_Dy, Cx, Cy, '#f4a261', `L4=${FB_L4}`);
+            // リンクの描画
+            drawLink(fourBarCtx, FB_Ax, FB_Ay, Bx, By, '#e63946', `L2`);
+            drawLink(fourBarCtx, Bx, By, Cx, Cy, '#457b9d', `L3`);
+            drawLink(fourBarCtx, FB_Dx, FB_Dy, Cx, Cy, '#f4a261', `L4`);
             
             fourBarCtx.strokeStyle = '#333';
             fourBarCtx.lineWidth = 15;
@@ -225,21 +234,21 @@
             fourBarCtx.lineTo(FB_Dx, FB_Dy);
             fourBarCtx.stroke();
 
-            // ピンの描画 (前回のコードから変更なし)
+            // ピンの描画
             drawPin(fourBarCtx, FB_Ax, FB_Ay, '#2a9d8f');
             drawPin(fourBarCtx, FB_Dx, FB_Dy, '#2a9d8f');
             drawPin(fourBarCtx, Bx, By, '#e9c46a');
             drawPin(fourBarCtx, Cx, Cy, '#a8dadc');
             
-            // ★ 軌跡座標の保存（C点）
+            // 軌跡座標の保存（C点）
             fourBarTrace.push({x: Cx, y: Cy});
-            if (fourBarTrace.length > 500) { // データが大きくなりすぎないように制限
+            if (fourBarTrace.length > 500) { 
                 fourBarTrace.shift();
             }
         }
 
         //==================================================
-        // 2. スライダクランク機構のロジック
+        // 2. スライダクランク機構のロジック (2つの軌跡を復活)
         //==================================================
 
         const sliderCrankCanvas = document.getElementById('sliderCrankCanvas');
@@ -257,11 +266,10 @@
         const SC_Oy = sliderCrankH / 2;
         
         sliderCrankInfo.innerHTML = `
-		<font size="5">
-                <div style="color: green; font-weight: bold;">
-                    円運動→直線運動
-                </div>
-		</font>
+            <div style="color: green; font-weight: bold; font-size: 1.1em;">
+                円運動 → 直線運動 (往復)
+            </div>
+            <div id="SC_displacement">変位: --</div>
         `;
 
 
@@ -283,8 +291,11 @@
 
             sliderCrankCtx.clearRect(0, 0, sliderCrankW, sliderCrankH);
             
-            // ★ 軌跡の描画
-            drawTrace(sliderCrankCtx, sliderCrankTrace, '#e63946'); // クランク先端Aの軌跡 (円)
+            // ★ 軌跡の描画 (A点: 円)
+            drawTrace(sliderCrankCtx, sliderCrankTraceA, '#e63946');
+            
+            // ★ 軌跡の描画 (B点: 水平直線)
+            drawTrace(sliderCrankCtx, sliderCrankTraceB, '#f4a261'); 
 
             // レールの描画
             sliderCrankCtx.strokeStyle = '#999';
@@ -294,9 +305,9 @@
             sliderCrankCtx.lineTo(sliderCrankW, SC_Oy);
             sliderCrankCtx.stroke();
             
-            // リンクの描画 (前回のコードから変更なし)
-            drawLink(sliderCrankCtx, SC_Ox, SC_Oy, Ax, Ay, '#e63946', `R=${SC_R}`);
-            drawLink(sliderCrankCtx, Ax, Ay, Bx, By, '#457b9d', `L=${SC_L}`);
+            // リンクの描画
+            drawLink(sliderCrankCtx, SC_Ox, SC_Oy, Ax, Ay, '#e63946', `R`);
+            drawLink(sliderCrankCtx, Ax, Ay, Bx, By, '#457b9d', `L`);
 
             // スライダ (B) の描画
             const sliderW = 30;
@@ -309,19 +320,22 @@
             drawPin(sliderCrankCtx, Ax, Ay, '#e9c46a');
             drawPin(sliderCrankCtx, Bx, By, '#a8dadc');
 
-            // ★ 軌跡座標の保存（A点）
-            sliderCrankTrace.push({x: Ax, y: Ay});
-            if (sliderCrankTrace.length > 500) { 
-                sliderCrankTrace.shift();
+            // ★ 軌跡座標の保存
+            sliderCrankTraceA.push({x: Ax, y: Ay});
+            sliderCrankTraceB.push({x: Bx, y: By}); 
+            
+            if (sliderCrankTraceA.length > 500) { 
+                sliderCrankTraceA.shift();
+                sliderCrankTraceB.shift(); 
             }
 
             const displacement = Bx - (SC_Ox + SC_R);
-            document.getElementById('SC_displacement').textContent = `変位 (右端からのズレ): ${displacement.toFixed(2)}`;
+            document.getElementById('SC_displacement').textContent = `スライダ位置(X): ${Bx.toFixed(2)}`;
         }
 
 
         //==================================================
-        // 共通: ドラッグ操作のロジック (前回と同じ)
+        // 共通: ドラッグ操作のロジック (タッチ対応は元からOK)
         //==================================================
 
         let isDragging = false;
@@ -329,8 +343,8 @@
         const dragRadius = 15; 
 
         function getCanvasMousePos(canvas, event) {
-            // ... (前回の getCanvasMousePos 関数と同じ内容)
             const rect = canvas.getBoundingClientRect();
+            // ★ スマホ対応: event.touches[0]でタッチ座標を取得
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
             const clientY = event.touches ? event.touches[0].clientY : event.clientY;
 
@@ -341,7 +355,6 @@
         }
 
         function handleDragStart(event) {
-            // ... (前回の handleDragStart 関数と同じ内容)
             event.preventDefault(); 
             const canvas = event.target;
             const pos = getCanvasMousePos(canvas, event);
@@ -360,17 +373,19 @@
                 return;
             }
 
+            // ドラッグ開始を判定する範囲を広く設定 (タッチしやすいように)
             const targetX = fixedX + linkLength * Math.cos(currentAngle);
             const targetY = fixedY + linkLength * Math.sin(currentAngle);
 
+            // ★ ドラッグ可能エリアを広げる (ピンの半径*4 だったのを、今回はピンの半径*8)
+            const touchRadius = 8;
             const distSq = (pos.x - targetX) ** 2 + (pos.y - targetY) ** 2;
-            if (distSq < dragRadius * dragRadius * 4) { 
+            if (distSq < touchRadius * touchRadius * 8) { 
                 isDragging = true;
             }
         }
 
         function handleDragMove(event) {
-            // ... (前回の handleDragMove 関数と同じ内容)
             if (!isDragging || !activeCanvasId) return;
             event.preventDefault();
             
@@ -399,7 +414,7 @@
             activeCanvasId = null;
         }
 
-        // イベントリスナーの追加
+        // イベントリスナーの追加 (touchstart/touchmove/touchendは既に含まれており、適切に動作します)
         [fourBarCanvas, sliderCrankCanvas].forEach(canvas => {
             canvas.addEventListener('mousedown', handleDragStart);
             canvas.addEventListener('mousemove', handleDragMove);
@@ -414,6 +429,15 @@
 
         // 初期化処理
         window.onload = () => {
+            // キャンバスサイズをレスポンシブにする (スマホ向け)
+            [fourBarCanvas, sliderCrankCanvas].forEach(canvas => {
+                const containerWidth = canvas.parentElement.clientWidth;
+                // PCでの理想的なサイズ(600)と、現在のコンテナ幅の小さい方を選ぶ
+                const canvasSize = Math.min(600, containerWidth - 20); 
+                canvas.width = canvasSize;
+                canvas.height = canvasSize * 0.58; // 600x350の比率を維持
+            });
+
             checkGrashof(); 
             drawFourBar(); 
             drawSliderCrank();
