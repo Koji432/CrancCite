@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リンク機構 体験サイト</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            background-color: #f4f4f9;
+            padding: 10px;
+        }
+        h1 {
+            color: #0056b3;
+            margin-bottom: 5px;
+        }
+        h2 {
+            color: #1d3557;
+            margin-top: 40px;
+        }
+        canvas {
+            border: 3px solid #333;
+            background-color: #fff;
+            display: block;
+            margin: 10px auto;
+            cursor: grab;
+            touch-action: none; 
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        .instruction {
+            margin-top: 15px;
+            color: #e63946;
+            font-weight: bold;
+        }
+        .mechanism-container {
+            margin-bottom: 40px;
+        }
+        .info {
+            font-size: 0.9em;
+            margin-top: 10px;
+            padding: 5px;
+        }
+        .controls button {
+            padding: 8px 15px;
+            margin: 5px;
+            background-color: #2a9d8f;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background-color: #264653;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>動かしてみよう　リンク機構！！</h1>
+    <font size="5">
+    <p class="instruction">黄色い点をタップして機構を動かしてね！</p>
+    </font>
+    <div class="mechanism-container">
+        <h2>平行クランク</h2>
+        <canvas id="fourBarCanvas" width="600" height="350"></canvas>
+        <div id="fourBarInfo" class="info"></div>
+        <div class="controls">
+            <button onclick="clearTrace('fourBar')">軌跡をリセット</button>
+        </div>
+    </div>
+
+    <div class="mechanism-container">
+        <h2>往復直線スライダクランク機構</h2>
+        <canvas id="sliderCrankCanvas" width="600" height="350"></canvas>
+        <div id="sliderCrankInfo" class="info"></div>
+        <div class="controls">
+            <button onclick="clearTrace('sliderCrank')">軌跡をリセット</button>
+        </div>
+    </div>
+
+
+    <script>
+        const TWO_PI = 2 * Math.PI;
+
+        //==================================================
+        // 軌跡データ
+        //==================================================
+        let fourBarTrace = [];      // C点の軌跡を保存
+        let sliderCrankTrace = [];  // A点の軌跡を保存
+
+        // 軌跡をクリアするグローバル関数（HTMLボタン用）
+        function clearTrace(mechanism) {
+            if (mechanism === 'fourBar') {
+                fourBarTrace = [];
+                drawFourBar();
+            } else if (mechanism === 'sliderCrank') {
+                sliderCrankTrace = [];
+                drawSliderCrank();
+            }
+        }
+
+        // 補助関数: 軌跡の描画
+        function drawTrace(ctx, traceArray, color) {
+            if (traceArray.length < 2) return;
+
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.5; // 少し透明にして見やすくする
+            
+            ctx.moveTo(traceArray[0].x, traceArray[0].y);
+            for (let i = 1; i < traceArray.length; i++) {
+                ctx.lineTo(traceArray[i].x, traceArray[i].y);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0; // 透明度を元に戻す
+        }
+
+        //==================================================
+        // 補助関数: 描画ヘルパー (前回と同じ)
+        //==================================================
+
+        function drawLink(ctx, x1, y1, x2, y2, color, label) {
+            // ... (前回の drawLink 関数と同じ内容)
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#333';
+            ctx.font = '12px sans-serif';
+            ctx.fillText(label, (x1 + x2) / 2 + 5, (y1 + y2) / 2 + 5);
+        }
+
+        function drawPin(ctx, x, y, color) {
+            // ... (前回の drawPin 関数と同じ内容)
+            const pinRadius = 8;
+            ctx.beginPath();
+            ctx.arc(x, y, pinRadius, 0, TWO_PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+        }
+
+        //==================================================
+        // 1. 四節リンク機構のロジック
+        //==================================================
+        
+        const fourBarCanvas = document.getElementById('fourBarCanvas');
+        const fourBarCtx = fourBarCanvas.getContext('2d');
+        const fourBarW = fourBarCanvas.width;
+        const fourBarH = fourBarCanvas.height;
+        const fourBarInfo = document.getElementById('fourBarInfo');
+
+        const FB_L1 = 150; 
+        const FB_L2 = 80;    
+        const FB_L3 = 170;   
+        const FB_L4 = 100;   
+        
+        let fourBarAngle = Math.PI / 4; 
+
+        const FB_centerX = fourBarW / 2;
+        const FB_centerY = fourBarH / 2 + 50;
+
+        const FB_Ax = FB_centerX - FB_L1 / 2;
+        const FB_Ay = FB_centerY;
+        const FB_Dx = FB_centerX + FB_L1 / 2;
+        const FB_Dy = FB_centerY;
+
+        function checkGrashof() {
+            fourBarInfo.innerHTML = `
+		<font size="5">
+                <div style="color: green; font-weight: bold;">
+                    円運動→揺動運動
+                </div>
+		</font>
+            `;
+        }
+
+        function drawFourBar() {
+            const Bx = FB_Ax + FB_L2 * Math.cos(fourBarAngle);
+            const By = FB_Ay + FB_L2 * Math.sin(fourBarAngle);
+
+            const Kx = FB_Dx - Bx;
+            const Ky = FB_Dy - By;
+            const K = Math.sqrt(Kx * Kx + Ky * Ky);
+            
+            // 描画範囲外の処理
+            if (K > FB_L3 + FB_L4 || K < Math.abs(FB_L3 - FB_L4)) {
+                fourBarCtx.clearRect(0, 0, fourBarW, fourBarH);
+                fourBarCtx.fillStyle = 'red';
+                fourBarCtx.fillText('リンクの長さが不適切で、機構が閉じません。', FB_centerX - 100, FB_centerY);
+                return; 
+            }
+
+            const beta = Math.acos((FB_L4 * FB_L4 + K * K - FB_L3 * FB_L3) / (2 * FB_L4 * K));
+            const gamma = Math.atan2(Ky, Kx);
+            
+            const theta4 = gamma - beta;
+            const Cx = FB_Dx - FB_L4 * Math.cos(theta4);
+            const Cy = FB_Dy - FB_L4 * Math.sin(theta4);
+
+            fourBarCtx.clearRect(0, 0, fourBarW, fourBarH);
+            
+            // ★ 軌跡の描画
+            drawTrace(fourBarCtx, fourBarTrace, '#f4a261'); // L4と同じ色で軌跡を描画
+
+            // リンクの描画 (前回のコードから変更なし)
+            drawLink(fourBarCtx, FB_Ax, FB_Ay, Bx, By, '#e63946', `L2=${FB_L2}`);
+            drawLink(fourBarCtx, Bx, By, Cx, Cy, '#457b9d', `L3=${FB_L3}`);
+            drawLink(fourBarCtx, FB_Dx, FB_Dy, Cx, Cy, '#f4a261', `L4=${FB_L4}`);
+            
+            fourBarCtx.strokeStyle = '#333';
+            fourBarCtx.lineWidth = 15;
+            fourBarCtx.beginPath();
+            fourBarCtx.moveTo(FB_Ax, FB_Ay);
+            fourBarCtx.lineTo(FB_Dx, FB_Dy);
+            fourBarCtx.stroke();
+
+            // ピンの描画 (前回のコードから変更なし)
+            drawPin(fourBarCtx, FB_Ax, FB_Ay, '#2a9d8f');
+            drawPin(fourBarCtx, FB_Dx, FB_Dy, '#2a9d8f');
+            drawPin(fourBarCtx, Bx, By, '#e9c46a');
+            drawPin(fourBarCtx, Cx, Cy, '#a8dadc');
+            
+            // ★ 軌跡座標の保存（C点）
+            fourBarTrace.push({x: Cx, y: Cy});
+            if (fourBarTrace.length > 500) { // データが大きくなりすぎないように制限
+                fourBarTrace.shift();
+            }
+        }
+
+        //==================================================
+        // 2. スライダクランク機構のロジック
+        //==================================================
+
+        const sliderCrankCanvas = document.getElementById('sliderCrankCanvas');
+        const sliderCrankCtx = sliderCrankCanvas.getContext('2d');
+        const sliderCrankW = sliderCrankCanvas.width;
+        const sliderCrankH = sliderCrankCanvas.height;
+        const sliderCrankInfo = document.getElementById('sliderCrankInfo');
+
+        const SC_R = 70;  
+        const SC_L = 200; 
+        
+        let sliderCrankAngle = Math.PI / 4; 
+
+        const SC_Ox = sliderCrankW / 2 - 100; 
+        const SC_Oy = sliderCrankH / 2;
+        
+        sliderCrankInfo.innerHTML = `
+		<font size="5">
+                <div style="color: green; font-weight: bold;">
+                    円運動→直線運動
+                </div>
+		</font>
+        `;
+
+
+        function drawSliderCrank() {
+            const Ax = SC_Ox + SC_R * Math.cos(sliderCrankAngle);
+            const Ay = SC_Oy + SC_R * Math.sin(sliderCrankAngle);
+
+            const sin_theta_sq = Math.pow(SC_R * Math.sin(sliderCrankAngle), 2);
+            
+            if (SC_L * SC_L < sin_theta_sq) {
+                sliderCrankCtx.clearRect(0, 0, sliderCrankW, sliderCrankH);
+                sliderCrankCtx.fillStyle = 'red';
+                sliderCrankCtx.fillText('計算エラー', sliderCrankW/2, sliderCrankH/2);
+                return; 
+            }
+            
+            const Bx = Ax + Math.sqrt(SC_L * SC_L - sin_theta_sq);
+            const By = SC_Oy; 
+
+            sliderCrankCtx.clearRect(0, 0, sliderCrankW, sliderCrankH);
+            
+            // ★ 軌跡の描画
+            drawTrace(sliderCrankCtx, sliderCrankTrace, '#e63946'); // クランク先端Aの軌跡 (円)
+
+            // レールの描画
+            sliderCrankCtx.strokeStyle = '#999';
+            sliderCrankCtx.lineWidth = 10;
+            sliderCrankCtx.beginPath();
+            sliderCrankCtx.moveTo(0, SC_Oy);
+            sliderCrankCtx.lineTo(sliderCrankW, SC_Oy);
+            sliderCrankCtx.stroke();
+            
+            // リンクの描画 (前回のコードから変更なし)
+            drawLink(sliderCrankCtx, SC_Ox, SC_Oy, Ax, Ay, '#e63946', `R=${SC_R}`);
+            drawLink(sliderCrankCtx, Ax, Ay, Bx, By, '#457b9d', `L=${SC_L}`);
+
+            // スライダ (B) の描画
+            const sliderW = 30;
+            const sliderH = 50;
+            sliderCrankCtx.fillStyle = '#f4a261'; 
+            sliderCrankCtx.fillRect(Bx - sliderW / 2, By - sliderH / 2, sliderW, sliderH);
+            
+            // ピンの描画
+            drawPin(sliderCrankCtx, SC_Ox, SC_Oy, '#2a9d8f');
+            drawPin(sliderCrankCtx, Ax, Ay, '#e9c46a');
+            drawPin(sliderCrankCtx, Bx, By, '#a8dadc');
+
+            // ★ 軌跡座標の保存（A点）
+            sliderCrankTrace.push({x: Ax, y: Ay});
+            if (sliderCrankTrace.length > 500) { 
+                sliderCrankTrace.shift();
+            }
+
+            const displacement = Bx - (SC_Ox + SC_R);
+            document.getElementById('SC_displacement').textContent = `変位 (右端からのズレ): ${displacement.toFixed(2)}`;
+        }
+
+
+        //==================================================
+        // 共通: ドラッグ操作のロジック (前回と同じ)
+        //==================================================
+
+        let isDragging = false;
+        let activeCanvasId = null; 
+        const dragRadius = 15; 
+
+        function getCanvasMousePos(canvas, event) {
+            // ... (前回の getCanvasMousePos 関数と同じ内容)
+            const rect = canvas.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handleDragStart(event) {
+            // ... (前回の handleDragStart 関数と同じ内容)
+            event.preventDefault(); 
+            const canvas = event.target;
+            const pos = getCanvasMousePos(canvas, event);
+            activeCanvasId = canvas.id;
+
+            let fixedX, fixedY, linkLength;
+            let currentAngle;
+
+            if (activeCanvasId === 'fourBarCanvas') {
+                fixedX = FB_Ax; fixedY = FB_Ay; linkLength = FB_L2;
+                currentAngle = fourBarAngle;
+            } else if (activeCanvasId === 'sliderCrankCanvas') {
+                fixedX = SC_Ox; fixedY = SC_Oy; linkLength = SC_R;
+                currentAngle = sliderCrankAngle;
+            } else {
+                return;
+            }
+
+            const targetX = fixedX + linkLength * Math.cos(currentAngle);
+            const targetY = fixedY + linkLength * Math.sin(currentAngle);
+
+            const distSq = (pos.x - targetX) ** 2 + (pos.y - targetY) ** 2;
+            if (distSq < dragRadius * dragRadius * 4) { 
+                isDragging = true;
+            }
+        }
+
+        function handleDragMove(event) {
+            // ... (前回の handleDragMove 関数と同じ内容)
+            if (!isDragging || !activeCanvasId) return;
+            event.preventDefault();
+            
+            const canvas = document.getElementById(activeCanvasId);
+            const pos = getCanvasMousePos(canvas, event);
+
+            let fixedX, fixedY;
+
+            if (activeCanvasId === 'fourBarCanvas') {
+                fixedX = FB_Ax; fixedY = FB_Ay;
+                const dx = pos.x - fixedX;
+                const dy = pos.y - fixedY;
+                fourBarAngle = Math.atan2(dy, dx);
+                drawFourBar();
+            } else if (activeCanvasId === 'sliderCrankCanvas') {
+                fixedX = SC_Ox; fixedY = SC_Oy;
+                const dx = pos.x - fixedX;
+                const dy = pos.y - fixedY;
+                sliderCrankAngle = Math.atan2(dy, dx);
+                drawSliderCrank();
+            }
+        }
+
+        function handleDragEnd() {
+            isDragging = false;
+            activeCanvasId = null;
+        }
+
+        // イベントリスナーの追加
+        [fourBarCanvas, sliderCrankCanvas].forEach(canvas => {
+            canvas.addEventListener('mousedown', handleDragStart);
+            canvas.addEventListener('mousemove', handleDragMove);
+            canvas.addEventListener('mouseup', handleDragEnd);
+            canvas.addEventListener('mouseleave', handleDragEnd);
+
+            canvas.addEventListener('touchstart', handleDragStart);
+            canvas.addEventListener('touchmove', handleDragMove);
+            canvas.addEventListener('touchend', handleDragEnd);
+            canvas.addEventListener('touchcancel', handleDragEnd);
+        });
+
+        // 初期化処理
+        window.onload = () => {
+            checkGrashof(); 
+            drawFourBar(); 
+            drawSliderCrank();
+        };
+    </script>
+</body>
+</html>
